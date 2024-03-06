@@ -3,13 +3,18 @@ import numpy as np
 i = 0
 
 import cv2, queue, threading, time
+from ultralytics import YOLO
 
 # bufferless VideoCapture
 class VideoCapture:
 
-  def __init__(self, name):
-    self.cap = cv2.VideoCapture(name)
+  def __init__(self, url, config):
+    self.cap = cv2.VideoCapture(url)  
     self.q = queue.Queue()
+    self.config = config
+    self.last_run = time.time()
+    if (self.config['person_detect'] == 1):
+        self.local_model = YOLO("yolov8n.pt")    
     t = threading.Thread(target=self._reader)
     t.daemon = True
     t.start()
@@ -25,16 +30,20 @@ class VideoCapture:
           self.q.get_nowait()   # discard previous (unprocessed) frame
         except queue.Empty:
           pass
+      if (self.config['person_detect'] == 1) and (time.time() - self.last_run >= 1):
+          results = self.local_model.predict(frame, verbose=True)
+          self.last_run = time.time()
       self.q.put(frame)
 
   def read(self):
     return self.q.get()
-
-cap_list = [VideoCapture('rtsp://admin:thietgia95@192.168.1.245:554/cam/realmonitor?channel=1&subtype=1'),
-            VideoCapture('rtsp://admin:thietgia95@192.168.1.247:554/cam/realmonitor?channel=1&subtype=1'),
-            VideoCapture('rtsp://admin:thietgia95@192.168.1.248:554/cam/realmonitor?channel=1&subtype=1'),
-            VideoCapture('rtsp://admin:thietgia95@192.168.1.249:554/cam/realmonitor?channel=1&subtype=1'),
-            VideoCapture('rtsp://admin:thietgia95@192.168.1.250:554/cam/realmonitor?channel=1&subtype=1')]
+config = {'person_detect':1}
+config2 = {'person_detect':0}
+cap_list = [VideoCapture('rtsp://admin:thietgia95@192.168.1.245:554/cam/realmonitor?channel=1&subtype=1', config),
+            VideoCapture('rtsp://admin:thietgia95@192.168.1.247:554/cam/realmonitor?channel=1&subtype=1', config2),
+            VideoCapture('rtsp://admin:thietgia95@192.168.1.248:554/cam/realmonitor?channel=1&subtype=1', config2),
+            VideoCapture('rtsp://admin:thietgia95@192.168.1.249:554/cam/realmonitor?channel=1&subtype=1', config2),
+            VideoCapture('rtsp://admin:thietgia95@192.168.1.250:554/cam/realmonitor?channel=1&subtype=1', config2)]
 window_dim = (900, 1600)
 cap_list_dim = [(0,0, 800, 800), (0, 800, 200, 400), (200, 800, 200, 400), (400, 800, 200, 400), (600, 800, 200, 400)]
 scale = 100
@@ -53,8 +62,9 @@ while True:
       if (cap_dim[0]+cap_dim[2] > og_windows.shape[0]) or (
         cap_dim[1]+cap_dim[3] > og_windows.shape[1]):
           og_windows [cap_dim[0]:min(cap_dim[0]+cap_dim[2], og_windows.shape[0]),
-                  cap_dim[1]:min(cap_dim[1]+cap_dim[3], og_windows.shape[1])] = img[0:min(cap_dim[0]+cap_dim[2], og_windows.shape[0])-cap_dim[0],
-                                                                                    0:min(cap_dim[1]+cap_dim[3], og_windows.shape[1])-cap_dim[1]]
+                  cap_dim[1]:min(cap_dim[1]+cap_dim[3], og_windows.shape[1])] = img[
+                      0:min(cap_dim[0]+cap_dim[2], og_windows.shape[0])-cap_dim[0],
+                        0:min(cap_dim[1]+cap_dim[3], og_windows.shape[1])-cap_dim[1]]
       else:
           og_windows [cap_dim[0]:(cap_dim[0]+cap_dim[2]),
                   cap_dim[1]:(cap_dim[1]+cap_dim[3])] = img
